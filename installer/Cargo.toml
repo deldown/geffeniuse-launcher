@@ -1,0 +1,13 @@
+[package]
+name = "geffeniuse-installer"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+# Built on its own: it embeds the finished launcher, so it must not be part of the main workspace.
+[workspace]
+
+[profile.release]
+opt-level = "z"
+panic = "abort"
+strip = true

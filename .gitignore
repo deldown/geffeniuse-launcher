@@ -1,0 +1,11 @@
+/target
+.env
+*.log
+keystore.properties
+/dist
+/installer/payload/*
+/proxy/bundle.js
+/proxy/static_analysis_codeql_*
+
+# Minecraft Wiki pictures: bundled in release builds only, not part of the MIT code
+/ui/art/ver-*.webp

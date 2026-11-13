@@ -1,0 +1,4 @@
+body.console { display: flex; flex-direction: column; height: 100%; padding: 12px; gap: 10px; overflow: hidden; }
+body.console header { display: flex; align-items: center; gap: 8px; flex: none; }
+body.console .grow { flex: 1; }
+body.console .log { flex: 1; min-height: 0; height: auto; margin: 0; }
