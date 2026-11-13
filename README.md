@@ -38,7 +38,7 @@ Beta. Core features work and are tested, but expect rough edges. Please report b
 
 ## Licence
 
-MIT for the launcher's code (`LICENSE`). Pictures, logos and dependencies: `THIRD-PARTY-LICENSES.md`. Security reports: `SECURITY.md`.
+MIT for the launcher's code (`LICENSE`). The licence does not cover the Minecraft name, logos or game material, nor the third-party pictures and logos listed in `THIRD-PARTY-LICENSES.md`, which stay with their owners. Security reports: `SECURITY.md`.
 
 ## Build
 
