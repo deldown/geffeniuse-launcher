@@ -35,6 +35,6 @@ if [ "$FOUND" != 0 ]; then echo "blocked: semgrep secret scan reports $FOUND fin
 echo "secret scan: clean"
 
 if [ "$YES" != 1 ]; then git reset -q; echo "dry run: nothing committed. Add --yes to push."; exit 0; fi
-git -c user.name=matti -c user.email=claude@deldown.de commit -q -m "$MESSAGE"
+git -c user.name=deldown -c user.email=161086438+deldown@users.noreply.github.com commit -q -m "$MESSAGE"
 git push -q origin main
 echo "pushed $(git rev-parse --short HEAD) to $REPO"
