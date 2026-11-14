@@ -93,7 +93,7 @@ pub async fn prepare(
     account: &Account,
     on_progress: impl Fn(&str, crate::download::Progress) + Send + Sync,
 ) -> Result<Prepared> {
-    prepare_slot(dirs, client, settings, inst, account, 0, on_progress).await
+    prepare_slot(dirs, client, settings, inst, std::future::ready(Ok(account.clone())), 0, on_progress).await
 }
 
 /// Like `prepare`, for the `slot`-th window of the same modpack (0 is the first).
@@ -102,47 +102,52 @@ pub async fn prepare_slot(
     client: &reqwest::Client,
     settings: &Settings,
     inst: &Instance,
-    account: &Account,
+    account: impl std::future::Future<Output = Result<Account>>,
     slot: u32,
     on_progress: impl Fn(&str, crate::download::Progress) + Send + Sync,
 ) -> Result<Prepared> {
     let on_progress = &on_progress;
-    let vid = match inst.loader {
-        Loader::Vanilla => inst.mc_version.clone(),
-        Loader::Fabric | Loader::Quilt => {
-            let lv = match &inst.loader_version {
-                Some(v) => v.clone(),
-                None => crate::loaders::latest_loader(client, inst.loader, &inst.mc_version).await?,
-            };
-            crate::loaders::install_profile(dirs, client, inst.loader, &inst.mc_version, &lv).await?
-        }
-        Loader::Forge | Loader::Neoforge => {
-            let lv = match &inst.loader_version {
-                Some(v) => v.clone(),
-                None => crate::loaders::latest_loader(client, inst.loader, &inst.mc_version).await?,
-            };
-            // The installer needs the same Java the game will use.
-            let vanilla = mojang::resolve_version(dirs, client, &inst.mc_version).await?;
-            let major = vanilla.java_version.as_ref().map_or(8, |j| j.major_version);
-            let preferred = inst.java_path.as_deref().or(settings.java_path.as_deref());
-            let comp = vanilla.java_version.as_ref().and_then(|j| j.component.clone());
-            let java = crate::java::find_or_install(client, major, comp.as_deref(), preferred, &dirs.runtimes(), |p| on_progress("java", p)).await?;
-            crate::loaders::install_forge_like(dirs, client, inst.loader, &inst.mc_version, &lv, &java).await?
-        }
+    // Signing in takes several requests to Microsoft; the files are checked at the same time.
+    let files = async {
+        let vid = match inst.loader {
+            Loader::Vanilla => inst.mc_version.clone(),
+            Loader::Fabric | Loader::Quilt => {
+                let lv = match &inst.loader_version {
+                    Some(v) => v.clone(),
+                    None => crate::loaders::latest_loader(client, inst.loader, &inst.mc_version).await?,
+                };
+                crate::loaders::install_profile(dirs, client, inst.loader, &inst.mc_version, &lv).await?
+            }
+            Loader::Forge | Loader::Neoforge => {
+                let lv = match &inst.loader_version {
+                    Some(v) => v.clone(),
+                    None => crate::loaders::latest_loader(client, inst.loader, &inst.mc_version).await?,
+                };
+                // The installer needs the same Java the game will use.
+                let vanilla = mojang::resolve_version(dirs, client, &inst.mc_version).await?;
+                let major = vanilla.java_version.as_ref().map_or(8, |j| j.major_version);
+                let preferred = inst.java_path.as_deref().or(settings.java_path.as_deref());
+                let comp = vanilla.java_version.as_ref().and_then(|j| j.component.clone());
+                let java = crate::java::find_or_install(client, major, comp.as_deref(), preferred, &dirs.runtimes(), |p| on_progress("java", p)).await?;
+                crate::loaders::install_forge_like(dirs, client, inst.loader, &inst.mc_version, &lv, &java).await?
+            }
+        };
+        let v = mojang::resolve_version(dirs, client, &vid).await?;
+        let game_dir = instance::game_dir(dirs, &inst.id);
+        tokio::fs::create_dir_all(&game_dir).await?;
+        let libs = mojang::install_version(dirs, client, &v, &game_dir, settings.parallel_downloads as usize, on_progress).await?;
+
+        let natives_dir = natives_dir(dirs, &inst.id, slot);
+        let _ = tokio::fs::remove_dir_all(&natives_dir).await;
+        mojang::extract_natives(&libs, &natives_dir).await?;
+
+        let major = v.java_version.as_ref().map_or(8, |j| j.major_version);
+        let preferred = inst.java_path.as_deref().or(settings.java_path.as_deref());
+        let comp = v.java_version.as_ref().and_then(|j| j.component.clone());
+        let java = crate::java::find_or_install(client, major, comp.as_deref(), preferred, &dirs.runtimes(), |p| on_progress("java", p)).await?;
+        Ok((v, game_dir, libs, natives_dir, java))
     };
-    let v = mojang::resolve_version(dirs, client, &vid).await?;
-    let game_dir = instance::game_dir(dirs, &inst.id);
-    tokio::fs::create_dir_all(&game_dir).await?;
-    let libs = mojang::install_version(dirs, client, &v, &game_dir, settings.parallel_downloads as usize, on_progress).await?;
-
-    let natives_dir = natives_dir(dirs, &inst.id, slot);
-    let _ = tokio::fs::remove_dir_all(&natives_dir).await;
-    mojang::extract_natives(&libs, &natives_dir).await?;
-
-    let major = v.java_version.as_ref().map_or(8, |j| j.major_version);
-    let preferred = inst.java_path.as_deref().or(settings.java_path.as_deref());
-    let comp = v.java_version.as_ref().and_then(|j| j.component.clone());
-    let java = crate::java::find_or_install(client, major, comp.as_deref(), preferred, &dirs.runtimes(), |p| on_progress("java", p)).await?;
+    let ((v, game_dir, libs, natives_dir, java), account) = tokio::try_join!(files, account)?;
 
     let sep = if cfg!(windows) { ";" } else { ":" };
     let jar = mojang::client_jar(dirs, &v)?;

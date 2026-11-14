@@ -16,7 +16,22 @@ pub fn parse_major(out: &str) -> Option<u32> {
     }
 }
 
+/// Java homes carry a `release` file with the version, so most candidates are read without
+/// starting a JVM; starting one per candidate cost up to a second before every launch.
+fn major_from_release(java: &std::path::Path) -> Option<u32> {
+    if !java.is_file() {
+        return None;
+    }
+    let home = java.parent()?.parent()?;
+    let text = std::fs::read_to_string(home.join("release")).ok()?;
+    let line = text.lines().find(|l| l.starts_with("JAVA_VERSION="))?;
+    parse_major(line)
+}
+
 async fn major_of(path: &PathBuf) -> Option<u32> {
+    if let Some(m) = major_from_release(path) {
+        return Some(m);
+    }
     let mut cmd = Command::new(path);
     cmd.arg("-version");
     crate::paths::hide_console(&mut cmd);
@@ -220,6 +235,21 @@ pub async fn find_or_install(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_version_is_read_from_the_release_file() {
+        let home = std::env::temp_dir().join(format!("gn-release-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(home.join("bin")).unwrap();
+        let java = home.join("bin").join("java");
+        assert_eq!(major_from_release(&java), None, "no java binary, no answer");
+        std::fs::write(&java, "").unwrap();
+        assert_eq!(major_from_release(&java), None, "no release file, no answer");
+        std::fs::write(home.join("release"), "IMPLEMENTOR=\"Eclipse\"\nJAVA_VERSION=\"21.0.3\"\n").unwrap();
+        assert_eq!(major_from_release(&java), Some(21));
+        std::fs::write(home.join("release"), "JAVA_VERSION=\"1.8.0_392\"\n").unwrap();
+        assert_eq!(major_from_release(&java), Some(8));
+        let _ = std::fs::remove_dir_all(home);
+    }
 
     #[cfg(unix)]
     #[tokio::test]

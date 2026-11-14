@@ -283,9 +283,8 @@ pub(crate) async fn launch_instance(app: State<'_, App>, handle: AppHandle, id: 
 /// Prepares and spawns the game. `Ok(None)` means the user cancelled while it was preparing.
 pub(crate) async fn start_game(app: &App, handle: &AppHandle, inst: &Instance, cancel: &tokio::sync::Notify, join_args: Vec<String>, slot: u32) -> R<Option<tokio::process::Child>> {
     let settings = app.settings.lock().await.clone();
-    let account = resolve_account(app, &settings).await.map_err(err)?;
     let h = handle.clone();
-    let prepare = core::launch::prepare_slot(&app.dirs, &app.http, &settings, inst, &account, slot, move |stage, p| emit_progress(&h, stage, p));
+    let prepare = core::launch::prepare_slot(&app.dirs, &app.http, &settings, inst, resolve_account(app, &settings), slot, move |stage, p| emit_progress(&h, stage, p));
     let mut prepared = tokio::select! {
         r = prepare => r.map_err(err)?,
         () = cancel.notified() => return Ok(None),

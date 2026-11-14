@@ -90,13 +90,24 @@ pub async fn latest_loader(client: &reqwest::Client, l: Loader, mc: &str) -> Res
 }
 
 /// Writes the loader's profile json into versions/ and returns its version id.
+/// The version id Fabric's and Quilt's meta servers give a profile, e.g. `fabric-loader-0.16.9-1.21.1`.
+fn profile_id(l: Loader, mc: &str, loader_ver: &str) -> String {
+    format!("{}-loader-{loader_ver}-{mc}", if l == Loader::Quilt { "quilt" } else { "fabric" })
+}
+
 pub async fn install_profile(dirs: &Dirs, client: &reqwest::Client, l: Loader, mc: &str, loader_ver: &str) -> Result<String> {
     for s in [mc, loader_ver] {
         if !crate::paths::file_name_ok(s) {
             bail!("bad version string");
         }
     }
-    let url = format!("{}/{}/{}/profile/json", meta_base(l)?, mc, loader_ver);
+    let base = meta_base(l)?;
+    // A loader profile for a fixed loader and game version never changes, so the copy on disk is enough.
+    let known = profile_id(l, mc, loader_ver);
+    if dirs.versions().join(&known).join(format!("{known}.json")).is_file() {
+        return Ok(known);
+    }
+    let url = format!("{base}/{mc}/{loader_ver}/profile/json");
     let text = client.get(&url).send().await?.error_for_status()?.text().await?;
     let v: serde_json::Value = serde_json::from_str(&text)?;
     let id = v["id"].as_str().context("profile without id")?.to_string();
@@ -154,6 +165,25 @@ pub async fn install_forge_like(dirs: &Dirs, client: &reqwest::Client, l: Loader
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn profile_ids_match_the_meta_servers() {
+        assert_eq!(profile_id(Loader::Fabric, "1.21.1", "0.16.9"), "fabric-loader-0.16.9-1.21.1");
+        assert_eq!(profile_id(Loader::Quilt, "1.20.1", "0.27.1"), "quilt-loader-0.27.1-1.20.1");
+    }
+
+    #[tokio::test]
+    async fn a_cached_profile_is_used_without_any_request() {
+        let root = std::env::temp_dir().join(format!("gn-profile-{}", uuid::Uuid::new_v4()));
+        let dirs = Dirs::new(&root);
+        let id = profile_id(Loader::Fabric, "1.21.1", "0.16.9");
+        std::fs::create_dir_all(dirs.versions().join(&id)).unwrap();
+        std::fs::write(dirs.versions().join(&id).join(format!("{id}.json")), "{}").unwrap();
+        // A client without TLS roots cannot reach the meta server, so success means nothing was fetched.
+        let offline = reqwest::Client::builder().tls_built_in_root_certs(false).build().unwrap();
+        assert_eq!(install_profile(&dirs, &offline, Loader::Fabric, "1.21.1", "0.16.9").await.unwrap(), id);
+        let _ = std::fs::remove_dir_all(root);
+    }
 
     #[test]
     fn neoforge_pick() {

@@ -5,9 +5,7 @@ pub(crate) async fn resolve_account(app: &App, settings: &Settings) -> anyhow::R
     let Some(stored) = settings.active_account.as_ref().and_then(|u| list.iter().find(|a| &a.uuid == u)) else {
         anyhow::bail!("login required");
     };
-    let (acc, new) = core::auth::refresh(&app.http, &settings.ms_client_id, stored).await?;
-    core::auth::upsert(&app.dirs, new).await?;
-    Ok(acc)
+    app.sessions.account(&app.http, &settings.ms_client_id, &app.dirs, stored).await
 }
 
 #[derive(Serialize)]
@@ -44,6 +42,7 @@ pub(crate) async fn refresh_account_skins(app: State<'_, App>) -> R<Vec<AccountE
 #[tauri::command]
 pub(crate) async fn remove_account(app: State<'_, App>, uuid: String) -> R<()> {
     core::auth::remove(&app.dirs, &uuid).await.map_err(err)?;
+    app.sessions.forget(&uuid).await;
     let mut s = app.settings.lock().await;
     if s.active_account.as_deref() == Some(uuid.as_str()) {
         s.active_account = None;
@@ -88,9 +87,10 @@ pub(crate) async fn ms_login(app: State<'_, App>, handle: AppHandle) -> R<core::
     let code = rx.await.map_err(err)?;
     let _ = win.close();
     let code = code.map_err(err)?;
-    let (_acc, stored) = core::auth::login_with_code(&app.http, &client_id, &code).await.map_err(err)?;
-    let public = core::auth::Public { uuid: stored.uuid.clone(), name: stored.name.clone() };
-    core::auth::upsert(&app.dirs, stored).await.map_err(err)?;
+    let login = core::auth::login_with_code(&app.http, &client_id, &code).await.map_err(err)?;
+    let public = core::auth::Public { uuid: login.stored.uuid.clone(), name: login.stored.name.clone() };
+    core::auth::upsert(&app.dirs, login.stored.clone()).await.map_err(err)?;
+    app.sessions.remember(&login).await;
     let mut s = app.settings.lock().await;
     s.active_account = Some(public.uuid.clone());
     s.save(&app.dirs).await.map_err(err)?;

@@ -6,6 +6,8 @@ use crate::paths::Dirs;
 use anyhow::{bail, Context, Result};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
+use std::collections::HashMap;
+use std::time::{Duration, Instant};
 
 pub const REDIRECT: &str = "https://login.live.com/oauth20_desktop.srf";
 const SCOPE: &str = "XboxLive.signin offline_access";
@@ -88,7 +90,14 @@ fn xerr_text(code: u64) -> &'static str {
     }
 }
 
-async fn minecraft_login(c: &reqwest::Client, ms_access: &str) -> Result<(String, String, String)> {
+struct McLogin {
+    token: String,
+    uuid: String,
+    name: String,
+    valid_for: Duration,
+}
+
+async fn minecraft_login(c: &reqwest::Client, ms_access: &str) -> Result<McLogin> {
     let xbl: XblResp = c
         .post("https://user.auth.xboxlive.com/user/authenticate")
         .json(&json!({"Properties":{"AuthMethod":"RPS","SiteName":"user.auth.xboxlive.com","RpsTicket":format!("d={ms_access}")},"RelyingParty":"http://auth.xboxlive.com","TokenType":"JWT"}))
@@ -106,7 +115,7 @@ async fn minecraft_login(c: &reqwest::Client, ms_access: &str) -> Result<(String
     let xsts: XblResp = r.error_for_status()?.json().await?;
 
     #[derive(Deserialize)]
-    struct Mc { access_token: String }
+    struct Mc { access_token: String, #[serde(default)] expires_in: u64 }
     let mc: Mc = c
         .post("https://api.minecraftservices.com/authentication/login_with_xbox")
         .json(&json!({"identityToken": format!("XBL3.0 x={uhs};{}", xsts.token)}))
@@ -119,30 +128,73 @@ async fn minecraft_login(c: &reqwest::Client, ms_access: &str) -> Result<(String
         bail!("This account does not own Minecraft Java Edition.");
     }
     let p: Profile = p.error_for_status()?.json().await?;
-    Ok((mc.access_token, p.id, p.name))
+    Ok(McLogin { token: mc.access_token, uuid: p.id, name: p.name, valid_for: Duration::from_secs(mc.expires_in) })
 }
 
-fn finish(stored_refresh: Option<String>, t: Tokens, mc: (String, String, String)) -> Result<(Account, Stored)> {
+/// A finished sign-in: the game account, what is stored on disk, and how long the token lasts.
+pub struct Login {
+    pub account: Account,
+    pub stored: Stored,
+    pub valid_for: Duration,
+}
+
+fn finish(stored_refresh: Option<String>, t: Tokens, mc: McLogin) -> Result<Login> {
     let refresh = t.refresh_token.or(stored_refresh).context("no refresh token")?;
-    let (token, uuid, name) = mc;
-    Ok((
-        Account { name: name.clone(), uuid: uuid.clone(), access_token: token, user_type: "msa".into() },
-        Stored { uuid, name, refresh_token: refresh },
-    ))
+    Ok(Login {
+        account: Account { name: mc.name.clone(), uuid: mc.uuid.clone(), access_token: mc.token, user_type: "msa".into() },
+        stored: Stored { uuid: mc.uuid, name: mc.name, refresh_token: refresh },
+        valid_for: mc.valid_for,
+    })
 }
 
-pub async fn login_with_code(c: &reqwest::Client, client_id: &str, code: &str) -> Result<(Account, Stored)> {
+pub async fn login_with_code(c: &reqwest::Client, client_id: &str, code: &str) -> Result<Login> {
     let t = token_request(c, &[("client_id", client_id), ("code", code), ("grant_type", "authorization_code"), ("redirect_uri", REDIRECT), ("scope", SCOPE)]).await?;
     let mc = minecraft_login(c, &t.access_token).await?;
     finish(None, t, mc)
 }
 
-pub async fn refresh(c: &reqwest::Client, client_id: &str, s: &Stored) -> Result<(Account, Stored)> {
+pub async fn refresh(c: &reqwest::Client, client_id: &str, s: &Stored) -> Result<Login> {
     let t = token_request(c, &[("client_id", client_id), ("refresh_token", &s.refresh_token), ("grant_type", "refresh_token"), ("redirect_uri", REDIRECT), ("scope", SCOPE)]).await?;
     let mc = minecraft_login(c, &t.access_token).await?;
     finish(Some(s.refresh_token.clone()), t, mc)
 }
 
+/// A token is dropped this long before Mojang's expiry, so a game never starts with one about to lapse.
+const SESSION_MARGIN: Duration = Duration::from_secs(10 * 60);
+const SESSION_MAX: Duration = Duration::from_secs(24 * 60 * 60);
+
+/// Minecraft tokens last about a day. Launches inside that time reuse the token instead of
+/// repeating the five requests to Microsoft, Xbox and Mojang. Kept in memory only, never on disk.
+#[derive(Default)]
+pub struct Sessions(tokio::sync::Mutex<HashMap<String, (Account, Instant)>>);
+
+impl Sessions {
+    pub async fn account(&self, c: &reqwest::Client, client_id: &str, dirs: &Dirs, stored: &Stored) -> Result<Account> {
+        // Held across the refresh: two launches at once must not both spend the same refresh token.
+        let mut map = self.0.lock().await;
+        if let Some((acc, until)) = map.get(&stored.uuid) {
+            if Instant::now() < *until {
+                return Ok(acc.clone());
+            }
+        }
+        let login = refresh(c, client_id, stored).await?;
+        upsert(dirs, login.stored.clone()).await?;
+        map.insert(stored.uuid.clone(), (login.account.clone(), session_end(Instant::now(), login.valid_for)));
+        Ok(login.account)
+    }
+
+    pub async fn remember(&self, login: &Login) {
+        self.0.lock().await.insert(login.stored.uuid.clone(), (login.account.clone(), session_end(Instant::now(), login.valid_for)));
+    }
+
+    pub async fn forget(&self, uuid: &str) {
+        self.0.lock().await.remove(uuid);
+    }
+}
+
+fn session_end(now: Instant, valid_for: Duration) -> Instant {
+    now + valid_for.min(SESSION_MAX).saturating_sub(SESSION_MARGIN)
+}
 
 fn file(dirs: &Dirs) -> std::path::PathBuf { dirs.root.join("accounts.json") }
 
@@ -191,6 +243,32 @@ pub async fn remove(dirs: &Dirs, uuid: &str) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn account(uuid: &str) -> Account {
+        Account { name: "A".into(), uuid: uuid.into(), access_token: "t".into(), user_type: "msa".into() }
+    }
+
+    #[tokio::test]
+    async fn a_remembered_session_is_reused_without_any_request() {
+        let sessions = Sessions::default();
+        let stored = Stored { uuid: "u1".into(), name: "A".into(), refresh_token: "r".into() };
+        sessions.remember(&Login { account: account("u1"), stored: stored.clone(), valid_for: Duration::from_secs(86400) }).await;
+        // A client without TLS roots cannot reach Microsoft, so success means nothing was sent.
+        let offline = reqwest::Client::builder().tls_built_in_root_certs(false).build().unwrap();
+        let dirs = Dirs::new(std::env::temp_dir().join(format!("gn-sessions-{}", uuid::Uuid::new_v4())));
+        let got = sessions.account(&offline, "id", &dirs, &stored).await.unwrap();
+        assert_eq!(got.access_token, "t");
+        sessions.forget("u1").await;
+        assert!(sessions.0.lock().await.is_empty());
+    }
+
+    #[test]
+    fn sessions_end_before_the_token_and_never_last_longer_than_a_day() {
+        let now = Instant::now();
+        assert_eq!(session_end(now, Duration::from_secs(86400)), now + Duration::from_secs(86400 - 600));
+        assert_eq!(session_end(now, Duration::from_secs(10 * 86400)), now + Duration::from_secs(86400 - 600));
+        assert!(session_end(now, Duration::ZERO) <= now, "a token without expiry is never reused");
+    }
 
     #[test]
     fn redirect_parsing() {

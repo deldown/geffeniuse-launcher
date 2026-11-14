@@ -19,6 +19,7 @@ struct App {
     http: reqwest::Client,
     settings: Mutex<Settings>,
     discord: discord::Discord,
+    sessions: core::auth::Sessions,
     /// One console buffer per instance.
     logs: std::sync::Mutex<std::collections::HashMap<String, LogBuf>>,
     /// One cancel handle per instance that is preparing or running.
@@ -275,7 +276,7 @@ fn main() {
             }
             Ok(())
         })
-        .manage(App { dirs, discord, http: core::http_client(), settings: Mutex::new(settings), logs: Default::default(), runs: Default::default(), pack_cancel: Default::default() })
+        .manage(App { dirs, discord, sessions: Default::default(), http: core::http_client(), settings: Mutex::new(settings), logs: Default::default(), runs: Default::default(), pack_cancel: Default::default() })
         .register_uri_scheme_protocol("geffeniuse", move |_ctx, req| {
             // geffeniuse://{shot,icon}/<instance>/<file> (Linux) or http://geffeniuse.localhost/{shot,icon}/... (Windows):
             // validated lookups only, never raw paths.
