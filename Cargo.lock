@@ -1050,7 +1050,7 @@ dependencies = [
 
 [[package]]
 name = "geffeniuse"
-version = "0.17.7"
+version = "0.17.8"
 dependencies = [
  "anyhow",
  "geffeniuse-core",
@@ -1065,7 +1065,7 @@ dependencies = [
 
 [[package]]
 name = "geffeniuse-core"
-version = "0.17.7"
+version = "0.17.8"
 dependencies = [
  "anyhow",
  "dirs 5.0.1",

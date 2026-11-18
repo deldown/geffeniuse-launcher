@@ -34,7 +34,16 @@ pub(crate) async fn minecraft_versions(app: State<'_, App>) -> R<Vec<VersionOpti
 #[tauri::command]
 pub(crate) async fn create_instance(app: State<'_, App>, name: String, mc_version: String, loader: String) -> R<Instance> {
     let loader = Loader::parse(&loader).ok_or("unknown loader")?;
-    core::instance::create(&app.dirs, &name, &mc_version, loader, None, None).await.map_err(err)
+    let inst = core::instance::create(&app.dirs, &name, &mc_version, loader, None, None).await.map_err(err)?;
+    if app.settings.lock().await.auto_api_mod {
+        if let Some(api) = core::mods::api_mod(loader) {
+            // A missing API mod must not block the new modpack; it can still be added under "Add".
+            if let Err(e) = core::mods::install(&app.dirs, &app.http, &inst, api, true).await {
+                eprintln!("api mod for {}: {e:#}", inst.id);
+            }
+        }
+    }
+    Ok(inst)
 }
 
 #[tauri::command]

@@ -45,6 +45,8 @@ const MUST_TRANSLATE = [
   "Erneut suchen",
   "Aktualisiere …",
   "Zum Hinzufügen loslassen",
+  "Fabric API automatisch in neue Modpacks packen",
+  "Bei Fabric kommt Fabric API dazu, bei Quilt QFAPI. Fast alle Mods brauchen das. Forge und NeoForge bringen es selbst mit.",
 ];
 
 test("every German UI sentence has an English translation", () => {

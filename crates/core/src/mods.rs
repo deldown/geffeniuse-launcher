@@ -169,6 +169,15 @@ pub async fn identify(dirs: &Dirs, client: &reqwest::Client, id: &str) -> Result
 
 /// Installs the newest compatible version of a Modrinth project plus its required dependencies.
 /// Returns the titles that were newly installed.
+/// The library mod most mods of this loader need: Fabric API, or QFAPI for Quilt. Forge and NeoForge ship their own.
+pub fn api_mod(loader: Loader) -> Option<&'static str> {
+    match loader {
+        Loader::Fabric => Some("P7dR8mSH"),
+        Loader::Quilt => Some("qvIfYCYJ"),
+        _ => None,
+    }
+}
+
 pub async fn install(dirs: &Dirs, client: &reqwest::Client, inst: &Instance, project_id: &str, with_deps: bool) -> Result<Installed> {
     if inst.loader == Loader::Vanilla {
         bail!("Vanilla loads no mods. Create the instance with Fabric, Quilt, Forge or NeoForge.");
@@ -408,6 +417,31 @@ pub async fn dependencies_curseforge(dirs: &Dirs, client: &reqwest::Client, cf: 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    #[ignore = "downloads Fabric API and QFAPI from Modrinth"]
+    async fn live_new_fabric_and_quilt_modpacks_get_their_api_mod() {
+        let root = std::env::temp_dir().join(format!("gn-api-{}", uuid::Uuid::new_v4()));
+        let dirs = Dirs::new(&root);
+        let client = crate::http_client();
+        for (loader, needle) in [(Loader::Fabric, "fabric-api"), (Loader::Quilt, "qfapi")] {
+            let inst = instance::create(&dirs, "A", "1.20.1", loader, None, None).await.unwrap();
+            let r = install(&dirs, &client, &inst, api_mod(loader).unwrap(), true).await.unwrap();
+            let files: Vec<String> = list(&dirs, &inst.id).await.unwrap().into_iter().map(|m| m.file.to_lowercase()).collect();
+            println!("{loader:?}: installed {:?}, files {files:?}", r.installed);
+            assert!(files.iter().any(|f| f.contains(needle)), "{files:?}");
+        }
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn fabric_and_quilt_get_their_api_mod_and_the_others_none() {
+        assert_eq!(api_mod(Loader::Fabric), Some("P7dR8mSH"));
+        assert_eq!(api_mod(Loader::Quilt), Some("qvIfYCYJ"));
+        for l in [Loader::Forge, Loader::Neoforge, Loader::Vanilla] {
+            assert_eq!(api_mod(l), None);
+        }
+    }
 
     async fn setup() -> (Dirs, String, PathBuf) {
         let root = std::env::temp_dir().join(format!("gn-mods-{}", uuid::Uuid::new_v4()));

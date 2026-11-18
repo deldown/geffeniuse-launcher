@@ -245,3 +245,7 @@ PATTERNS.unshift(
   [/^Gruppe für 1 Eintrag$/, () => "Group for 1 item"],
   [/^Neue Version (.+)$/, (v) => `New version ${v}`],
 );
+Object.assign(EN, {
+  "Fabric API automatisch in neue Modpacks packen": "Add Fabric API to new modpacks automatically",
+  "Bei Fabric kommt Fabric API dazu, bei Quilt QFAPI. Fast alle Mods brauchen das. Forge und NeoForge bringen es selbst mit.": "Fabric gets Fabric API, Quilt gets QFAPI. Almost every mod needs it. Forge and NeoForge include it already.",
+});

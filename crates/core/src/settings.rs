@@ -34,6 +34,8 @@ pub struct Settings {
     pub multi_start: bool,
     /// Explain a crash in plain words when the game ends badly.
     pub crash_help: bool,
+    /// Put Fabric API (Quilt: QFAPI) into every new Fabric or Quilt modpack.
+    pub auto_api_mod: bool,
     /// Groups for mods, packs and shaders.
     pub content_groups: bool,
     /// Show groups as folders that open and close; off lists everything flat.
@@ -113,6 +115,7 @@ impl Default for Settings {
             mod_updates_autofilter: true,
             multi_start: true,
             crash_help: true,
+            auto_api_mod: true,
             content_groups: true,
             groups_as_folders: true,
             skin_figure: true,

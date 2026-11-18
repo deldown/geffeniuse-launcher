@@ -95,6 +95,7 @@ async function viewSettings(v) {
           h("span", { class: "small dim" }, "Das Spiel läuft auch bei geschlossenem Launcher weiter. Beim nächsten Öffnen erkennt er es wieder. Mit eigenem Konsolenfenster wird nur minimiert.")),
         toggle("Konsole nach dem Start in einem eigenen Fenster öffnen", "console_window"),
         toggle("Weiteres Fenster eines laufenden Modpacks erlauben", "multi_start", "Zeigt „Weiteres Fenster“, solange ein Modpack läuft."),
+        toggle("Fabric API automatisch in neue Modpacks packen", "auto_api_mod", "Bei Fabric kommt Fabric API dazu, bei Quilt QFAPI. Fast alle Mods brauchen das. Forge und NeoForge bringen es selbst mit."),
         toggle("Absturz-Hilfe anzeigen", "crash_help", "Erklärt in einfachen Worten, warum das Spiel abgestürzt ist, wenn der Launcher die Ursache erkennt."),
         toggle("Gruppen im Mods-Tab anbieten", "content_groups"),
         toggle("Gruppen als Ordner zeigen", "groups_as_folders", "Aus: eine einfache Liste, die Gruppe steht als Tag an jedem Eintrag."),
