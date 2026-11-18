@@ -138,7 +138,7 @@ async function buildProject(v, d, source, id, hit) {
   const links = [...(d.page_url ? [{ label: "Auf " + (source === "curseforge" ? "CurseForge" : "Modrinth") + " öffnen", url: d.page_url }] : []), ...d.links];
   if (links.length) side.append(h("section", { class: "block" }, h("h3", null, "Links"), links.map((l) => h("button", { class: "linkrow", onclick: () => openUrl(l.url) }, l.label + " ↗"))));
   const facts = [d.license && ["Lizenz", d.license], d.updated && ["Aktualisiert", new Date(d.updated).toLocaleDateString()]].filter(Boolean);
-  if (facts.length) side.append(h("section", { class: "block" }, h("h3", null, "Details"), facts.map(([k, val]) => h("div", { class: "small", style: "margin-top:6px" }, h("span", { class: "dim" }, k + ": "), val))));
+  if (facts.length) side.append(h("section", { class: "block" }, h("h3", null, "Details"), facts.map(([k, val]) => h("div", { class: "small", style: "margin-top:6px" }, h("span", { class: "dim" }, k, ": "), val))));
   body.append(side);
 }
 // A mod inside a modpack opens its own page; "back" returns to the modpack's list.

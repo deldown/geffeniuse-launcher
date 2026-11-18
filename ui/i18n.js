@@ -227,3 +227,21 @@ PATTERNS.push([/^Weiteres Fenster \((\d+) offen\)$/, (n) => "Another window (" +
 Object.assign(EN, { "Installation abgebrochen": "Installation cancelled" });
 Object.assign(EN, { "Fehlt": "Missing", "Lade die Datei herunter und lege sie in den Ordner oder hierher.": "Download the file and put it in the folder, or drop it here.", "Auf CurseForge öffnen": "Open on CurseForge", "Ordner öffnen": "Open folder", "Ausblenden": "Hide", "Nicht mehr als fehlend anzeigen": "Stop showing as missing", "fehlen": "missing" });
 Object.assign(EN, { "Beta": "Beta", "Der Launcher ist noch in der Beta. Fehler bitte melden.": "The launcher is still in beta. Please report bugs." });
+Object.assign(EN, {
+  "Benötigte Mods installieren?": "Install required mods?", "Nur diesen Mod": "Only this mod",
+  "Mit Abhängigkeit installieren": "Install with dependency", "Mit Abhängigkeiten installieren": "Install with dependencies",
+  "Abhängigkeiten": "Dependencies", "Dieser Mod braucht keine weiteren Mods.": "This mod needs no other mods.",
+  "Lizenz": "License", "Aktualisiert": "Updated", "Modpack-Ordner": "Modpack folder",
+  "Öffnet den Ordner dieses Modpacks im Dateimanager, zum Beispiel um Mods von Hand hineinzulegen.": "Opens this modpack's folder in the file manager, for example to add mods by hand.",
+  "In diesem Modpack suchen …": "Search this modpack …",
+  "Die Landschaft folgt dem Datum. Automatisch ist Blau, zu Halloween, Weihnachten und Silvester mit passenden Farben.": "The scenery follows the date. Automatic is blue, with matching colours for Halloween, Christmas and New Year's Eve.",
+});
+PATTERNS.unshift(
+  [/^Dieser Mod braucht einen weiteren Mod, damit er läuft:$/, () => "This mod needs one other mod to run:"],
+  [/^Dieser Mod braucht (\d+) weitere Mods, damit er läuft:$/, (n) => `This mod needs ${n} other mods to run:`],
+  [/^(\d+) Abhängigkeit(en)?( · (\d+) installiert)?$/, (n, pl, _, k) => `${n} ${pl ? "dependencies" : "dependency"}${k ? ` · ${k} installed` : ""}`],
+  [/^Zeigt nur Mods für Minecraft (.+) mit (.+)\. Beim Installieren fragen wir, ob benötigte Mods mitkommen sollen\.$/, (a, b) => `Only shows mods for Minecraft ${a} with ${b}. When installing, we ask whether required mods should come along.`],
+  [/^(\d+) Einträge$/, (n) => `${n} items`],
+  [/^Gruppe für 1 Eintrag$/, () => "Group for 1 item"],
+  [/^Neue Version (.+)$/, (v) => `New version ${v}`],
+);

@@ -6,6 +6,8 @@
 # the taskbar; with another name the shell cannot match them and shows a generic or an old icon.
 #   scripts/package-linux.sh 0.6.3
 set -euo pipefail
+# Package contents must be world-readable whatever umask the calling shell uses.
+umask 022
 V="${1:?usage: package-linux.sh <version>}"
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"; OUT="${GEFFENIUSE_DIST:-$HOME/ssd}"; TMP="${TMPDIR:-/tmp}"
 ID=de.deldown.geffeniuse

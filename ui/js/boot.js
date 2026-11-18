@@ -35,9 +35,13 @@ const SKIP_REASONS = {
   "not a file": "keine Datei", "too large": "zu groß", "Vanilla loads no mods": "Vanilla lädt keine Mods", "create a world first": "erstelle zuerst eine Welt",
   "not a resource pack, shader or data pack": "kein Ressourcenpaket, Shader oder Datapack", "unsupported file type": "Dateityp nicht unterstützt", "already there": "schon vorhanden",
 };
-const dropzone = h("div", { id: "dropzone", hidden: true }, h("div", { class: "dropcard" }, h("strong", null, "Zum Hinzufügen loslassen"), h("span", { class: "small dim" }, ".jar, .zip oder .mrpack")));
+const dropzone = h("div", { id: "dropzone", hidden: true });
 document.body.append(dropzone);
-const showDrop = (on) => { dropzone.hidden = !on; };
+// Built when shown, so it follows the language chosen after start.
+const showDrop = (on) => {
+  if (on && dropzone.hidden) dropzone.replaceChildren(h("div", { class: "dropcard" }, h("strong", null, "Zum Hinzufügen loslassen"), h("span", { class: "small dim" }, ".jar, .zip oder .mrpack")));
+  dropzone.hidden = !on;
+};
 async function handleDrop(paths) {
   if (!paths.length) return;
   if (state.route === "instance" && state.instanceId) {
